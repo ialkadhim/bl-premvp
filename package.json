@@ -1,0 +1,16 @@
+{
+  "name": "bl-premvp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "pg": "^8.11.0",
+    "bcrypt": "^5.1.0",
+    "dotenv": "^16.3.1"
+  }
+}
