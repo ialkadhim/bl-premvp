@@ -18,11 +18,11 @@ const pool = new Pool({
 });
 
 app.get('/api/seed', async (req, res) => {
-  await pool.query(\`
+  await pool.query(`
     INSERT INTO users (last_name, membership_number, full_name, gender, tennis_competency_level, status)
     VALUES ('Park', '12345', 'Subin Park', 'Male', 'Intermediate', 'Active')
     ON CONFLICT (membership_number) DO NOTHING
-  \`);
+  `);
   res.json({ message: 'Seeded user' });
 });
 
@@ -46,7 +46,7 @@ app.get('/api/events/:userId', async (req, res) => {
     const userLevel = userRes.rows[0].tennis_competency_level;
 
     const result = await pool.query(
-      \`
+      `
       SELECT 
         e.*, 
         COUNT(r.status) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
@@ -57,7 +57,7 @@ app.get('/api/events/:userId', async (req, res) => {
       WHERE e.level_required = 'All Levels' OR e.level_required = $2
       GROUP BY e.id, ur.status
       ORDER BY e.start_time ASC
-      \`,
+      `,
       [userId, userLevel]
     );
 
@@ -78,12 +78,12 @@ app.post('/api/register', async (req, res) => {
   try {
     console.log('REGISTRATION:', { userId, eventId, status });
     await pool.query(
-      \`
+      `
       INSERT INTO registrations (user_id, event_id, status)
       VALUES ($1, $2, $3)
       ON CONFLICT (user_id, event_id)
       DO UPDATE SET status = EXCLUDED.status
-      \`,
+      `,
       [userId, eventId, status]
     );
     res.json({ message: 'Registration updated' });
