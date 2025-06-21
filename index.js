@@ -1,4 +1,7 @@
 require('dotenv').config();
+
+console.log("🧪 DEBUG ENVIRONMENT PORT:", process.env.PORT);
+
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
@@ -37,4 +40,4 @@ app.post('/api/login', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 console.log('ðŸš€ Listening on port via env:', PORT);
-app.listen(PORT, () => console.log(`âœ… Server is running on port ${PORT}`));
+app.listen(PORT, () => console.log(`HEY… Server is running on port ${PORT}`));
