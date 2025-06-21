@@ -17,11 +17,11 @@ const pool = new Pool({
 });
 
 app.get('/api/seed', async (req, res) => {
-  await pool.query(\`
+  await pool.query(`
     INSERT INTO users (last_name, membership_number, full_name, gender, tennis_competency_level, status)
     VALUES ('Park','12345','Subin Park','Male','Intermediate','Active')
     ON CONFLICT (membership_number) DO NOTHING
-  \`);
+  `);
   res.json({ message: 'Seeded user' });
 });
 
@@ -37,4 +37,4 @@ app.post('/api/login', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 console.log('🚀 Listening on port via env:', process.env.PORT);
-app.listen(PORT, () => console.log(\`✅ Server is running on port \${PORT}\`));
+app.listen(PORT, () => console.log(`✅ Server is running on port ${PORT}`));
