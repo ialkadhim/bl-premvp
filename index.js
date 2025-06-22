@@ -68,7 +68,7 @@ app.get('/api/events/:userId', async (req, res) => {
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
       WHERE 
         e.level IS NULL OR
-        ABS(e.level - $2) <= 1 OR
+        ABS(e.level - $2) <= 0.5 OR
         e.level_required = 'All Levels'
       GROUP BY e.id, ur.status
       ORDER BY e.start_time ASC
