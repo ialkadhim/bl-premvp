@@ -26,6 +26,15 @@ app.get('/api/seed', async (req, res) => {
   res.json({ message: 'Seeded user' });
 });
 
+function mapLevelToCompetency(level) {
+  if (level === 0 || level === 0.5) return 'Entry';
+  if (level === 1 || level === 1.5) return 'Beginner';
+  if (level === 2 || level === 2.5) return 'Intermediate';
+  if (level === 3 || level === 3.5) return 'Advanced';
+  if (level === 4) return 'Professional';
+  return 'Not Specified';
+}
+
 app.post('/api/login', async (req, res) => {
   const { lastName, membershipNumber } = req.body;
   const result = await pool.query(
@@ -33,7 +42,10 @@ app.post('/api/login', async (req, res) => {
     [lastName, membershipNumber]
   );
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-  res.json(result.rows[0]);
+
+  const user = result.rows[0];
+  user.tennis_competency_level = mapLevelToCompetency(user.level);
+  res.json(user);
 });
 
 app.get('/api/events/:userId', async (req, res) => {
