@@ -52,10 +52,10 @@ app.get('/api/events/:userId', async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const userRes = await pool.query('SELECT tennis_competency_level FROM users WHERE id = $1', [userId]);
+    const userRes = await pool.query('SELECT level FROM users WHERE id = $1', [userId]);
     if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
-    const userLevel = userRes.rows[0].tennis_competency_level;
+    const userLevel = userRes.rows[0].level;
 
     const result = await pool.query(
       `
@@ -66,7 +66,10 @@ app.get('/api/events/:userId', async (req, res) => {
       FROM events e
       LEFT JOIN registrations r ON r.event_id = e.id
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
-      WHERE e.level_required = 'All Levels' OR e.level_required = $2
+      WHERE 
+        e.level IS NULL OR
+        ABS(e.level - $2) <= 1 OR
+        e.level_required = 'All Levels'
       GROUP BY e.id, ur.status
       ORDER BY e.start_time ASC
       `,
