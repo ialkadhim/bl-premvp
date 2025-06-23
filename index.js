@@ -56,13 +56,13 @@ app.get('/api/events/:userId', async (req, res) => {
   const userId = req.params.userId;
 
   try {
-    const userRes = await pool.query('SELECT tennis_competency_level, gender FROM users WHERE id = $1', [userId]);
+    const userRes = await pool.query('SELECT level, gender FROM users WHERE id = $1', [userId]);
 
     if (!userRes.rows.length) {
       return res.status(404).send('User not found');
     }
 
-    const userLevel = userRes.rows[0].tennis_competency_level;
+    const userLevel = userRes.rows[0].level;
     const userGender = userRes.rows[0].gender;
 
     const result = await pool.query(`
@@ -83,7 +83,10 @@ app.get('/api/events/:userId', async (req, res) => {
       LEFT JOIN registrations r ON r.event_id = e.id
       LEFT JOIN registrations r2 ON r2.event_id = e.id
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
-      WHERE (e.level_required = 'All Levels' OR e.level_required = $2)
+      WHERE (
+        e.level_required = 'All Levels' 
+        OR e.level::int BETWEEN ($2 - 0.5) AND ($2 + 0.5)
+      )
         AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
       GROUP BY e.id
       ORDER BY e.start_time ASC
