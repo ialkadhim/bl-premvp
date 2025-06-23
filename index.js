@@ -48,18 +48,22 @@ app.post('/api/login', async (req, res) => {
   res.json(user);
 });
 
+// ✅ /api/events/:userId with level, gender, waitlist count, and description
+
 app.get('/api/events/:userId', async (req, res) => {
-  const { userId } = req.params;
+  const userId = req.params.userId;
 
   try {
-    const ur = await pool.query('SELECT level FROM users WHERE id = $1', [userId]);
+    const userRes = await pool.query('SELECT tennis_competency_level, gender FROM users WHERE id = $1', [userId]);
 
-    if (ur.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const userGender = ur.rows[0].gender;
-    const userLevel = ur.rows[0].level;
+    if (!userRes.rows.length) {
+      return res.status(404).send('User not found');
+    }
 
-    const result = await pool.query(
-      `
+    const userLevel = userRes.rows[0].tennis_competency_level;
+    const userGender = userRes.rows[0].gender;
+
+    const result = await pool.query(`
       SELECT 
         e.id,
         e.title,
@@ -72,7 +76,7 @@ app.get('/api/events/:userId', async (req, res) => {
         e.cust_group,
         COUNT(r.status) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
         COUNT(r2.status) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
-        ur.status AS user_status
+        MAX(ur.status) AS user_status
       FROM events e
       LEFT JOIN registrations r ON r.event_id = e.id
       LEFT JOIN registrations r2 ON r2.event_id = e.id
@@ -81,22 +85,24 @@ app.get('/api/events/:userId', async (req, res) => {
         e.level IS NULL OR
         ABS(e.level - $2) <= 0.5 OR
         e.level_required = 'All Levels'
-      GROUP BY e.id, ur.status
+
+        AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
+      GROUP BY e.id
       ORDER BY e.start_time ASC
-      `,
-      [userId, userLevel, userGender]
-    );
+    `, [userId, userLevel, userGender]);
 
     res.json(result.rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to fetch events' });
+    res.status(500).send('Error retrieving events');
   }
 });
 
-// 👥 New route to return confirmed participants
+// ✅ /api/event/:eventId/participants returns last names of confirmed participants
+
 app.get('/api/event/:eventId/participants', async (req, res) => {
   const eventId = req.params.eventId;
+
   try {
     const result = await pool.query(`
       SELECT u.last_name FROM registrations r
