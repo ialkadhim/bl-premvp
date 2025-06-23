@@ -17,6 +17,15 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+function mapLevelToCompetency(level) {
+  if (level === 0 || level === 0.5) return 'Entry';
+  if (level === 1 || level === 1.5) return 'Beginner';
+  if (level === 2 || level === 2.5) return 'Intermediate';
+  if (level === 3 || level === 3.5) return 'Advanced';
+  if (level === 4) return 'Professional';
+  return 'Not Specified';
+}
+
 app.post('/api/login', async (req, res) => {
   const { lastName, membershipNumber } = req.body;
   const result = await pool.query(
