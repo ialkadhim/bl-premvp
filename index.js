@@ -131,7 +131,7 @@ app.post('/api/register', async (req, res) => {
   try {
     if (status === 'withdrawn') {
       // Remove user's registration
-      await pool.query('DELETE FROM registrations WHERE user_id = $1 AND event_id = $2', [userId, eventId]);
+      await pool.query('UPDATE registrations SET status = 'withdrawn' WHERE user_id = $1 AND event_id = $2', [userId, eventId]);
 
       // Promote next user from waitlist if any
       const waitlisted = await pool.query(
