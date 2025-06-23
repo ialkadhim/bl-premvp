@@ -72,11 +72,11 @@ app.get('/api/events/:userId', async (req, res) => {
         e.cust_group,
         COUNT(r.status) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
         COUNT(r2.status) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
-        userReg.status AS user_status
+        ur.status AS user_status
       FROM events e
       LEFT JOIN registrations r ON r.event_id = e.id
       LEFT JOIN registrations r2 ON r2.event_id = e.id
-      LEFT JOIN registrations ur ON userReg.event_id = e.id AND userReg.user_id = $1
+      LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
       WHERE 
         e.level IS NULL OR
         ABS(e.level - $2) <= 0.5 OR
