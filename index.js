@@ -129,6 +129,27 @@ app.post('/api/register', async (req, res) => {
   }
 
   try {
+    if (status === 'withdrawn') {
+      // Remove user's registration
+      await pool.query('DELETE FROM registrations WHERE user_id = $1 AND event_id = $2', [userId, eventId]);
+
+      // Promote next user from waitlist if any
+      const waitlisted = await pool.query(
+        'SELECT user_id FROM registrations WHERE event_id = $1 AND status = $2 ORDER BY created_at ASC LIMIT 1',
+        [eventId, 'waitlist']
+      );
+
+      if (waitlisted.rows.length > 0) {
+        const nextUserId = waitlisted.rows[0].user_id;
+        await pool.query(
+          'UPDATE registrations SET status = $1 WHERE user_id = $2 AND event_id = $3',
+          ['confirmed', nextUserId, eventId]
+        );
+      }
+
+      return res.sendStatus(204);
+    }
+    
     console.log('REGISTRATION:', { userId, eventId, status });
     await pool.query(
       `
