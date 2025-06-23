@@ -17,6 +17,15 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+app.get('/api/seed', async (req, res) => {
+  await pool.query(`
+    INSERT INTO users (last_name, membership_number, full_name, gender, tennis_competency_level, status)
+    VALUES ('Park', '12345', 'Subin Park', 'Male', 'Intermediate', 'Active')
+    ON CONFLICT (membership_number) DO NOTHING
+  `);
+  res.json({ message: 'Seeded user' });
+});
+
 function mapLevelToCompetency(level) {
   if (level === 0 || level === 0.5) return 'Entry';
   if (level === 1 || level === 1.5) return 'Beginner';
@@ -39,74 +48,38 @@ app.post('/api/login', async (req, res) => {
   res.json(user);
 });
 
-// ✅ /api/events/:userId with level, gender, waitlist count, and description
-
 app.get('/api/events/:userId', async (req, res) => {
-  const userId = req.params.userId;
+  const { userId } = req.params;
 
   try {
-    const userRes = await pool.query('SELECT tennis_competency_level, gender FROM users WHERE id = $1', [userId]);
+    const userRes = await pool.query('SELECT level FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
-    if (!userRes.rows.length) {
-      return res.status(404).send('User not found');
-    }
+    const userLevel = userRes.rows[0].level;
 
-    const userLevel = userRes.rows[0].tennis_competency_level;
-    const userGender = userRes.rows[0].gender;
-
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT 
-        e.id,
-        e.title,
-        TO_CHAR(e.start_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
-        TO_CHAR(e.end_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS end_time,
-        e.level_required,
-        e.capacity,
-        e.description,
-        e.type,
-        e.cust_group,
-        e.level,
+        e.*, 
         COUNT(r.status) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
-        COUNT(r2.status) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
-        MAX(ur.status) AS user_status
+        ur.status AS user_status
       FROM events e
       LEFT JOIN registrations r ON r.event_id = e.id
-      LEFT JOIN registrations r2 ON r2.event_id = e.id
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
       WHERE 
         e.level IS NULL OR
         ABS(e.level - $2) <= 0.5 OR
         e.level_required = 'All Levels'
-
-        AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
-      GROUP BY e.id
+      GROUP BY e.id, ur.status
       ORDER BY e.start_time ASC
-    `, [userId, userLevel, userGender]);
+      `,
+      [userId, userLevel]
+    );
 
     res.json(result.rows);
   } catch (err) {
     console.error(err);
-    res.status(500).send('Error retrieving events');
-  }
-});
-
-// ✅ /api/event/:eventId/participants returns last names of confirmed participants
-
-app.get('/api/event/:eventId/participants', async (req, res) => {
-  const eventId = req.params.eventId;
-
-  try {
-    const result = await pool.query(`
-      SELECT u.last_name FROM registrations r
-      JOIN users u ON u.id = r.user_id
-      WHERE r.event_id = $1 AND r.status = 'confirmed'
-    `, [eventId]);
-
-    const names = result.rows.map(row => row.last_name);
-    res.json({ participants: names });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Failed to load participants');
+    res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
