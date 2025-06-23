@@ -52,11 +52,11 @@ app.get('/api/events/:userId', async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const userRes = await pool.query('SELECT level FROM users WHERE id = $1', [userId]);
+    const userReg = await pool.query('SELECT level FROM users WHERE id = $1', [userId]);
 
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (userReg.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const userGender = userReg.row[0].gender;
-    const userLevel = userRes.rows[0].level;
+    const userLevel = userReg.rows[0].level;
 
     const result = await pool.query(
       `
@@ -72,11 +72,11 @@ app.get('/api/events/:userId', async (req, res) => {
         e.cust_group,
         COUNT(r.status) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
         COUNT(r2.status) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
-        ur.status AS user_status
+        userReg.status AS user_status
       FROM events e
       LEFT JOIN registrations r ON r.event_id = e.id
       LEFT JOIN registrations r2 ON r2.event_id = e.id
-      LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
+      LEFT JOIN registrations ur ON userReg.event_id = e.id AND userReg.user_id = $1
       WHERE 
         e.level IS NULL OR
         ABS(e.level - $2) <= 0.5 OR
