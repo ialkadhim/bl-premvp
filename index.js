@@ -1,3 +1,21 @@
+require('dotenv').config();
+const express = require('express');
+const app = express();
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const { Pool } = require('pg');
+
+app.use(cors());
+app.use(bodyParser.json());
+
+const pool = new Pool({
+  user: process.env.PGUSER,
+  host: process.env.PGHOST,
+  database: process.env.PGDATABASE,
+  password: process.env.PGPASSWORD,
+  port: process.env.PGPORT,
+  ssl: { rejectUnauthorized: false }
+});
 
 app.post('/api/login', async (req, res) => {
   const { lastName, membershipNumber } = req.body;
