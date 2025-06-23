@@ -1,4 +1,16 @@
 
+app.post('/api/login', async (req, res) => {
+  const { lastName, membershipNumber } = req.body;
+  const result = await pool.query(
+    'SELECT * FROM users WHERE LOWER(last_name) = LOWER($1) AND membership_number = $2',
+    [lastName, membershipNumber]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const user = result.rows[0];
+  user.tennis_competency_level = mapLevelToCompetency(user.level);
+  res.json(user);
+});
 
 // ✅ /api/events/:userId with level, gender, waitlist count, and description
 
