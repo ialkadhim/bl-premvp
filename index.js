@@ -55,7 +55,7 @@ app.get('/api/events/:userId', async (req, res) => {
     const userReg = await pool.query('SELECT level FROM users WHERE id = $1', [userId]);
 
     if (userReg.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const userGender = userReg.row[0].gender;
+    const userGender = userReg.rows[0].gender;
     const userLevel = userReg.rows[0].level;
 
     const result = await pool.query(
