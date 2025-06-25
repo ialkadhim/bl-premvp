@@ -52,6 +52,7 @@ app.post('/api/login', async (req, res) => {
 // sorting of events
 // ✅ /api/events/:userId with level, gender (cust_group), waitlist count, and description
 
+
 app.get('/api/events/:userId', async (req, res) => {
   const userId = req.params.userId;
 
@@ -72,6 +73,7 @@ app.get('/api/events/:userId', async (req, res) => {
         TO_CHAR(e.start_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
         TO_CHAR(e.end_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS end_time,
         e.level_required,
+        e.level,
         e.capacity,
         e.description,
         e.type,
@@ -85,7 +87,7 @@ app.get('/api/events/:userId', async (req, res) => {
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
       WHERE (
         e.level_required = 'All Levels' 
-        OR e.level::int BETWEEN ($2 - 0.5) AND ($2 + 0.5)
+        OR e.level BETWEEN ($2 - 0.5) AND ($2 + 0.5)
       )
         AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
       GROUP BY e.id
@@ -98,6 +100,7 @@ app.get('/api/events/:userId', async (req, res) => {
     res.status(500).send('Error retrieving events');
   }
 });
+
 
 // ✅ /api/event/:eventId/participants returns confirmed participant last names
 
