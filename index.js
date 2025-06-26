@@ -77,6 +77,12 @@ app.get('/api/events/:userId', async (req, res) => {
       return res.status(400).json({ error: 'Invalid user level' });
     }
 
+    // Calculate the level range in JavaScript
+    const minLevel = userLevelNum - 1.0;
+    const maxLevel = userLevelNum + 0.5;
+    
+    console.log('DEBUG - Level range:', { userLevel: userLevelNum, minLevel, maxLevel });
+
     try {
       const result = await pool.query(`
         SELECT 
@@ -100,12 +106,12 @@ app.get('/api/events/:userId', async (req, res) => {
         LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
         WHERE (
           e.level_required = 'All Levels' 
-          OR (e.level >= $2 - 1 AND e.level <= $2 + 0.5)
+          OR (e.level >= $2 AND e.level <= $3)
         )
-          AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
+          AND (e.cust_group = 'Mix Adult' OR e.cust_group = $4)
         GROUP BY e.id
         ORDER BY e.start_time ASC
-      `, [userId, userLevelNum, userGender]);
+      `, [userId, minLevel, maxLevel, userGender]);
 
       console.log('DEBUG - Events found:', result.rows.length);
       console.log('DEBUG - Event levels:', result.rows.map(e => ({ id: e.id, title: e.title, level: e.level, level_required: e.level_required })));
