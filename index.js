@@ -67,6 +67,10 @@ app.get('/api/events/:userId', async (req, res) => {
 
     console.log('DEBUG - User Level:', userLevel, 'User Gender:', userGender);
 
+    // Convert userLevel to number to ensure proper decimal comparison
+    const userLevelNum = parseFloat(userLevel);
+    console.log('DEBUG - User Level (parsed):', userLevelNum, 'Type:', typeof userLevelNum);
+
     const result = await pool.query(`
       SELECT 
         e.id,
@@ -89,12 +93,12 @@ app.get('/api/events/:userId', async (req, res) => {
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
       WHERE (
         e.level_required = 'All Levels' 
-        OR e.level BETWEEN ($2 - 1) AND ($2 + 0.5)
+        OR CAST(e.level AS NUMERIC) BETWEEN ($2 - 1) AND ($2 + 0.5)
       )
         AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
       GROUP BY e.id
       ORDER BY e.start_time ASC
-    `, [userId, userLevel, userGender]);
+    `, [userId, userLevelNum, userGender]);
 
     console.log('DEBUG - Events found:', result.rows.length);
     console.log('DEBUG - Event levels:', result.rows.map(e => ({ id: e.id, title: e.title, level: e.level, level_required: e.level_required })));
