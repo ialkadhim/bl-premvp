@@ -77,7 +77,6 @@ app.get('/api/events/:userId', async (req, res) => {
         e.type,
         e.cust_group,
         e.venue,
-        e.level,
         COUNT(DISTINCT r.user_id) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
         COUNT(DISTINCT r2.user_id) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
         MAX(ur.status) AS user_status
@@ -122,7 +121,7 @@ app.get('/api/event/:eventId/participants', async (req, res) => {
 });
 
 
-//event registration
+//event registration with atomic transactions and capacity enforcement
 app.post('/api/register', async (req, res) => {
   const { userId, eventId, status } = req.body;
 
@@ -130,42 +129,134 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Missing registration details' });
   }
 
+  const client = await pool.connect();
+  
   try {
-    if (status === 'withdrawn') {
-      // Remove user's registration
-      await pool.query('UPDATE registrations SET status = $1 WHERE user_id = $2 AND event_id = $3', ['withdrawn', userId, eventId]);
+    await client.query('BEGIN');
 
-      // Promote next user from waitlist if any
-      const waitlisted = await pool.query(
-        'SELECT user_id FROM registrations WHERE event_id = $1 AND status = $2 ORDER BY created_at ASC LIMIT 1',
-        [eventId, 'waitlist']
+    if (status === 'withdrawn') {
+      // Handle withdrawal with atomic transaction
+      await client.query(
+        'UPDATE registrations SET status = $1 WHERE user_id = $2 AND event_id = $3',
+        ['withdrawn', userId, eventId]
       );
 
-      if (waitlisted.rows.length > 0) {
-        const nextUserId = waitlisted.rows[0].user_id;
-        await pool.query(
-          'UPDATE registrations SET status = $1 WHERE user_id = $2 AND event_id = $3',
-          ['confirmed', nextUserId, eventId]
-        );
+      // Get current confirmed count and capacity
+      const eventResult = await client.query(
+        'SELECT capacity FROM events WHERE id = $1',
+        [eventId]
+      );
+      
+      if (eventResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Event not found' });
       }
 
+      const capacity = eventResult.rows[0].capacity;
+      
+      // Count current confirmed registrations
+      const confirmedCount = await client.query(
+        'SELECT COUNT(*) FROM registrations WHERE event_id = $1 AND status = $2',
+        [eventId, 'confirmed']
+      );
+      
+      const currentConfirmed = parseInt(confirmedCount.rows[0].count);
+
+      // If there's space available, promote from waitlist
+      if (currentConfirmed < capacity) {
+        const waitlisted = await client.query(
+          'SELECT user_id FROM registrations WHERE event_id = $1 AND status = $2 ORDER BY created_at ASC LIMIT 1',
+          [eventId, 'waitlist']
+        );
+
+        if (waitlisted.rows.length > 0) {
+          const nextUserId = waitlisted.rows[0].user_id;
+          await client.query(
+            'UPDATE registrations SET status = $1 WHERE user_id = $2 AND event_id = $3',
+            ['confirmed', nextUserId, eventId]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
       return res.sendStatus(204);
     }
-    
+
+    // Handle registration (confirmed or waitlist)
     console.log('REGISTRATION:', { userId, eventId, status });
-    await pool.query(
+
+    // Get event with FOR UPDATE lock to prevent race conditions
+    const eventResult = await client.query(
+      'SELECT capacity FROM events WHERE id = $1 FOR UPDATE',
+      [eventId]
+    );
+
+    if (eventResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    const capacity = eventResult.rows[0].capacity;
+
+    // Count current confirmed registrations
+    const confirmedCount = await client.query(
+      'SELECT COUNT(*) FROM registrations WHERE event_id = $1 AND status = $2',
+      [eventId, 'confirmed']
+    );
+    
+    const currentConfirmed = parseInt(confirmedCount.rows[0].count);
+
+    // Check if user is already registered
+    const existingRegistration = await client.query(
+      'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
+      [userId, eventId]
+    );
+
+    let finalStatus = status;
+
+    // If trying to register as confirmed but event is full
+    if (status === 'confirmed' && currentConfirmed >= capacity) {
+      if (existingRegistration.rows.length === 0) {
+        // New registration - put on waitlist
+        finalStatus = 'waitlist';
+      } else {
+        // Existing registration - keep current status
+        finalStatus = existingRegistration.rows[0].status;
+      }
+    }
+
+    // Insert or update registration
+    await client.query(
       `
       INSERT INTO registrations (user_id, event_id, status)
       VALUES ($1, $2, $3)
       ON CONFLICT (user_id, event_id)
       DO UPDATE SET status = EXCLUDED.status
       `,
-      [userId, eventId, status]
+      [userId, eventId, finalStatus]
     );
-    res.json({ message: 'Registration updated' });
+
+    await client.query('COMMIT');
+
+    // Return appropriate response
+    if (status === 'confirmed' && finalStatus === 'waitlist') {
+      res.status(409).json({ 
+        message: 'Event is full. You have been added to the waitlist.',
+        status: 'waitlist'
+      });
+    } else {
+      res.json({ 
+        message: 'Registration updated',
+        status: finalStatus
+      });
+    }
+
   } catch (err) {
-    console.error(err);
+    await client.query('ROLLBACK');
+    console.error('Registration error:', err);
     res.status(500).json({ error: 'Failed to update registration' });
+  } finally {
+    client.release();
   }
 });
 
