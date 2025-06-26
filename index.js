@@ -71,39 +71,45 @@ app.get('/api/events/:userId', async (req, res) => {
     const userLevelNum = parseFloat(userLevel);
     console.log('DEBUG - User Level (parsed):', userLevelNum, 'Type:', typeof userLevelNum);
 
-    const result = await pool.query(`
-      SELECT 
-        e.id,
-        e.title,
-        TO_CHAR(e.start_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
-        TO_CHAR(e.end_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS end_time,
-        e.level_required,
-        e.level,
-        e.capacity,
-        e.description,
-        e.type,
-        e.cust_group,
-        e.venue,
-        COUNT(DISTINCT r.user_id) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
-        COUNT(DISTINCT r2.user_id) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
-        MAX(ur.status) AS user_status
-      FROM events e
-      LEFT JOIN registrations r ON r.event_id = e.id
-      LEFT JOIN registrations r2 ON r2.event_id = e.id
-      LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
-      WHERE (
-        e.level_required = 'All Levels' 
-        OR CAST(e.level AS NUMERIC) BETWEEN ($2 - 1) AND ($2 + 0.5)
-      )
-        AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
-      GROUP BY e.id
-      ORDER BY e.start_time ASC
-    `, [userId, userLevelNum, userGender]);
+    try {
+      const result = await pool.query(`
+        SELECT 
+          e.id,
+          e.title,
+          TO_CHAR(e.start_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
+          TO_CHAR(e.end_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS end_time,
+          e.level_required,
+          e.level,
+          e.capacity,
+          e.description,
+          e.type,
+          e.cust_group,
+          e.venue,
+          COUNT(DISTINCT r.user_id) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
+          COUNT(DISTINCT r2.user_id) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
+          MAX(ur.status) AS user_status
+        FROM events e
+        LEFT JOIN registrations r ON r.event_id = e.id
+        LEFT JOIN registrations r2 ON r2.event_id = e.id
+        LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
+        WHERE (
+          e.level_required = 'All Levels' 
+          OR (e.level >= $2 - 1 AND e.level <= $2 + 0.5)
+        )
+          AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
+        GROUP BY e.id
+        ORDER BY e.start_time ASC
+      `, [userId, userLevelNum, userGender]);
 
-    console.log('DEBUG - Events found:', result.rows.length);
-    console.log('DEBUG - Event levels:', result.rows.map(e => ({ id: e.id, title: e.title, level: e.level, level_required: e.level_required })));
+      console.log('DEBUG - Events found:', result.rows.length);
+      console.log('DEBUG - Event levels:', result.rows.map(e => ({ id: e.id, title: e.title, level: e.level, level_required: e.level_required })));
 
-    res.json(result.rows);
+      res.json(result.rows);
+    } catch (queryError) {
+      console.error('DEBUG - Query error details:', queryError);
+      console.error('DEBUG - User ID:', userId, 'User Level:', userLevelNum, 'User Gender:', userGender);
+      throw queryError;
+    }
   } catch (err) {
     console.error(err);
     res.status(500).send('Error retrieving events');
