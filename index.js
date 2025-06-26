@@ -108,7 +108,7 @@ app.get('/api/event/:eventId/participants', async (req, res) => {
 
   try {
     const result = await pool.query(`
-      SELECT u.last_name FROM registrations r
+      SELECT u.full_name FROM registrations r
       JOIN users u ON u.id = r.user_id
       WHERE r.event_id = $1 AND r.status = 'confirmed'
     `, [eventId]);
