@@ -113,7 +113,7 @@ app.get('/api/event/:eventId/participants', async (req, res) => {
       WHERE r.event_id = $1 AND r.status = 'confirmed'
     `, [eventId]);
 
-    const names = result.rows.map(row => row.last_name);
+    const names = result.rows.map(row => row.full_name);
     res.json({ participants: names });
   } catch (err) {
     console.error(err);
