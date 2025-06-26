@@ -77,6 +77,7 @@ app.get('/api/events/:userId', async (req, res) => {
         e.type,
         e.cust_group,
         e.venue,
+        e.level,
         COUNT(DISTINCT r.user_id) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
         COUNT(DISTINCT r2.user_id) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
         MAX(ur.status) AS user_status
