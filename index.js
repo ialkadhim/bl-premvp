@@ -65,11 +65,17 @@ app.get('/api/events/:userId', async (req, res) => {
     const userLevel = userRes.rows[0].level;
     const userGender = userRes.rows[0].gender;
 
-    console.log('DEBUG - User Level:', userLevel, 'User Gender:', userGender);
+    console.log('DEBUG - User Level (raw):', userLevel, 'Type:', typeof userLevel, 'User Gender:', userGender);
 
-    // Convert userLevel to number to ensure proper decimal comparison
+    // Convert userLevel to float8 to match database schema
     const userLevelNum = parseFloat(userLevel);
-    console.log('DEBUG - User Level (parsed):', userLevelNum, 'Type:', typeof userLevelNum);
+    console.log('DEBUG - User Level (parsed):', userLevelNum, 'Type:', typeof userLevelNum, 'Is NaN:', isNaN(userLevelNum));
+
+    // Validate the parsed level
+    if (isNaN(userLevelNum)) {
+      console.error('DEBUG - Invalid user level:', userLevel);
+      return res.status(400).json({ error: 'Invalid user level' });
+    }
 
     try {
       const result = await pool.query(`
