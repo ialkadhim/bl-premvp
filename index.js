@@ -89,7 +89,7 @@ app.get('/api/events/:userId', async (req, res) => {
       LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
       WHERE (
         e.level_required = 'All Levels' 
-        OR e.level::int BETWEEN ($2 - 1) AND ($2 + 0.5)
+        OR e.level BETWEEN ($2 - 1) AND ($2 + 0.5)
       )
         AND (e.cust_group = 'Mix Adult' OR e.cust_group = $3)
       GROUP BY e.id
