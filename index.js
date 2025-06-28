@@ -99,7 +99,8 @@ app.get('/api/events/:userId', async (req, res) => {
           e.venue,
           COUNT(DISTINCT r.user_id) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
           COUNT(DISTINCT r2.user_id) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
-          MAX(ur.status) AS user_status
+          MAX(ur.status) AS user_status,
+          ur.completion AS completion
         FROM events e
         LEFT JOIN registrations r ON r.event_id = e.id
         LEFT JOIN registrations r2 ON r2.event_id = e.id
@@ -109,7 +110,7 @@ app.get('/api/events/:userId', async (req, res) => {
           OR (e.level >= $2 AND e.level <= $3)
         )
           AND (e.cust_group = 'Mix Adult' OR e.cust_group = $4)
-        GROUP BY e.id
+        GROUP BY e.id, ur.completion
         ORDER BY e.start_time ASC
       `, [userId, minLevel, maxLevel, userGender]);
 
