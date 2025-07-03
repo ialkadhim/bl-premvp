@@ -48,6 +48,33 @@ app.post('/api/login', async (req, res) => {
   res.json(user);
 });
 
+// Admin: Get all events (no filtering) - MUST be before /api/events/:userId
+app.get('/api/events', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        e.id,
+        e.title,
+        TO_CHAR(e.start_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS start_time,
+        TO_CHAR(e.end_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS end_time,
+        e.level_required,
+        e.level,
+        e.capacity,
+        e.description,
+        e.type,
+        e.cust_group,
+        e.venue,
+        (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'confirmed') AS spots_filled,
+        (SELECT COUNT(*) FROM registrations r2 WHERE r2.event_id = e.id AND r2.status = 'waitlist') AS waitlist_count
+      FROM events e
+      ORDER BY e.start_time ASC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving all events');
+  }
+});
 
 // sorting of events
 // ✅ /api/events/:userId with level, gender (cust_group), waitlist count, and description
@@ -146,6 +173,96 @@ app.get('/api/event/:eventId/participants', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send('Failed to load participants');
+  }
+});
+
+// Admin: Get active users count
+app.get('/api/users/active/count', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM users 
+      WHERE status = 'Active'
+    `);
+    res.json({ count: parseInt(result.rows[0].count) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving active users count');
+  }
+});
+
+// User-specific: Get active users count (fallback)
+app.get('/api/users/:userId/active/count', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM users 
+      WHERE status = 'Active'
+    `);
+    res.json({ count: parseInt(result.rows[0].count) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving active users count');
+  }
+});
+
+// Admin: Get confirmed registrations count for current week
+app.get('/api/registrations/confirmed/week', async (req, res) => {
+  try {
+    // Get current week (Sunday to Saturday)
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek); // Sunday
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6); // Saturday
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const result = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM registrations r
+      JOIN events e ON e.id = r.event_id
+      WHERE r.status = 'confirmed' 
+        AND e.start_time >= $1 
+        AND e.start_time <= $2
+    `, [weekStart.toISOString(), weekEnd.toISOString()]);
+    
+    res.json({ count: parseInt(result.rows[0].count) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving confirmed registrations count');
+  }
+});
+
+// User-specific: Get confirmed registrations count for current week (fallback)
+app.get('/api/registrations/:userId/confirmed/week', async (req, res) => {
+  try {
+    // Get current week (Sunday to Saturday)
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek); // Sunday
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6); // Saturday
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const result = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM registrations r
+      JOIN events e ON e.id = r.event_id
+      WHERE r.status = 'confirmed' 
+        AND e.start_time >= $1 
+        AND e.start_time <= $2
+    `, [weekStart.toISOString(), weekEnd.toISOString()]);
+    
+    res.json({ count: parseInt(result.rows[0].count) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error retrieving confirmed registrations count');
   }
 });
 
@@ -286,6 +403,25 @@ app.post('/api/register', async (req, res) => {
     res.status(500).json({ error: 'Failed to update registration' });
   } finally {
     client.release();
+  }
+});
+
+// Registration survey endpoint
+app.post('/api/register-survey', async (req, res) => {
+  const { full_name, phone, email, type, subscription, club_name, city } = req.body;
+  if (!full_name || !phone || !email || !type || !subscription || !club_name || !city) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO register_survey (full_name, phone, email, type, subscription, club_name, city)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [full_name, phone, email, type, subscription, club_name, city]
+    );
+    res.status(201).json({ message: 'Registration received' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save registration' });
   }
 });
 
