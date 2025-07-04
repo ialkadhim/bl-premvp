@@ -409,14 +409,15 @@ app.post('/api/register', async (req, res) => {
 // Registration survey endpoint
 app.post('/api/register-survey', async (req, res) => {
   const { full_name, phone, email, type, subscription, club_name, city } = req.body;
-  if (!full_name || !phone || !email || !type || !subscription || !club_name || !city) {
+  // Only require club_name for Academy
+  if (!full_name || !phone || !email || !type || !subscription || !city || (type === 'Academy' && !club_name)) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   try {
     await pool.query(
       `INSERT INTO register_survey (full_name, phone, email, type, subscription, club_name, city)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [full_name, phone, email, type, subscription, club_name, city]
+      [full_name, phone, email, type, subscription, club_name || null, city]
     );
     res.status(201).json({ message: 'Registration received' });
   } catch (err) {
