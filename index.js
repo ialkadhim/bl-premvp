@@ -542,6 +542,17 @@ app.post('/api/register-survey', async (req, res) => {
   }
 });
 
+// Get all users (for participant search)
+app.get('/api/users', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, full_name, email FROM users ORDER BY full_name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Failed to fetch users:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 console.log('🧪 DEBUG ENVIRONMENT PORT:', PORT);
 app.listen(PORT, () => console.log(`✅ Server is running on port ${PORT}`));
