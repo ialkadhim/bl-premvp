@@ -83,6 +83,7 @@ app.post('/api/events', async (req, res) => {
     start_time,
     end_time,
     day,
+    event_date,
     level_required,
     level,
     capacity,
@@ -99,10 +100,10 @@ app.post('/api/events', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO events (title, start_time, end_time, day, level_required, level, capacity, description, type, cust_group, venue, guided_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO events (title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [title, start_time, end_time, day, level_required, level, capacity, description, type, cust_group, venue, guided_by]
+      [title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by]
     );
     res.status(201).json({ event: result.rows[0], message: 'Event created successfully' });
   } catch (err) {
