@@ -17,6 +17,109 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// Middleware to check admin authentication
+const authenticateAdmin = async (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  try {
+    // In a real app, you'd verify JWT tokens
+    // For now, we'll use a simple session approach
+    const result = await pool.query(
+      'SELECT a.*, ac.name as academy_name, ac.details as academy_details FROM admins a JOIN academies ac ON a.academy_id = ac.id WHERE a.session_token = $1',
+      [token]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+    
+    req.admin = result.rows[0];
+    next();
+  } catch (err) {
+    console.error('Auth error:', err);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+};
+
+// Admin login endpoint
+app.post('/api/admin/login', async (req, res) => {
+  const { username, password, stayLoggedIn } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `SELECT a.*, ac.name as academy_name, ac.details as academy_details 
+       FROM admins a 
+       JOIN academies ac ON a.academy_id = ac.id 
+       WHERE a.user_name = $1 AND a.passkey = $2`,
+      [username, password]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    const admin = result.rows[0];
+    
+    // Generate session token (in production, use JWT)
+    const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    // Store session token in database
+    await pool.query(
+      'UPDATE admins SET session_token = $1, last_login = NOW() WHERE id = $2',
+      [sessionToken, admin.id]
+    );
+    
+    res.json({
+      token: sessionToken,
+      admin: {
+        id: admin.id,
+        username: admin.user_name,
+        academy_id: admin.academy_id,
+        academy_name: admin.academy_name,
+        academy_details: admin.academy_details
+      },
+      stayLoggedIn: stayLoggedIn || false
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Admin logout endpoint
+app.post('/api/admin/logout', authenticateAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE admins SET session_token = NULL WHERE id = $1',
+      [req.admin.id]
+    );
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Get current admin session
+app.get('/api/admin/session', authenticateAdmin, async (req, res) => {
+  res.json({
+    admin: {
+      id: req.admin.id,
+      username: req.admin.user_name,
+      academy_id: req.admin.academy_id,
+      academy_name: req.admin.academy_name,
+      academy_details: req.admin.academy_details
+    }
+  });
+});
+
 app.get('/api/seed', async (req, res) => {
   await pool.query(`
     INSERT INTO users (last_name, membership_number, full_name, gender, tennis_competency_level, status)
@@ -48,8 +151,8 @@ app.post('/api/login', async (req, res) => {
   res.json(user);
 });
 
-// Admin: Get all events (no filtering) - MUST be before /api/events/:userId
-app.get('/api/events', async (req, res) => {
+// Admin: Get all events for the authenticated admin's academy
+app.get('/api/events', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
@@ -65,11 +168,13 @@ app.get('/api/events', async (req, res) => {
         e.cust_group,
         e.venue,
         e.guided_by,
+        e.academy_id,
         (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'confirmed') AS spots_filled,
         (SELECT COUNT(*) FROM registrations r2 WHERE r2.event_id = e.id AND r2.status = 'waitlist') AS waitlist_count
       FROM events e
+      WHERE e.academy_id = $1
       ORDER BY e.start_time ASC
-    `);
+    `, [req.admin.academy_id]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -78,7 +183,7 @@ app.get('/api/events', async (req, res) => {
 });
 
 // Create a new event (New Booking)
-app.post('/api/events', async (req, res) => {
+app.post('/api/events', authenticateAdmin, async (req, res) => {
   const {
     title,
     start_time,
@@ -112,11 +217,11 @@ app.post('/api/events', async (req, res) => {
   }
 
   try {
-    const params = [title, start_time, end_time, day, safeEventDate, level_required, level, capacity, description, type, cust_group, venue, guided_by];
+    const params = [title, start_time, end_time, day, safeEventDate, level_required, level, capacity, description, type, cust_group, venue, guided_by, req.admin.academy_id];
     console.log('DEBUG: Insert params:', params);
     const result = await pool.query(
-      `INSERT INTO events (title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO events (title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by, academy_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       params
     );
@@ -128,7 +233,7 @@ app.post('/api/events', async (req, res) => {
 });
 
 // Update an event by ID
-app.put('/api/events/:id', async (req, res) => {
+app.put('/api/events/:id', authenticateAdmin, async (req, res) => {
   const eventId = req.params.id;
   const {
     title,
@@ -161,7 +266,7 @@ app.put('/api/events/:id', async (req, res) => {
   }
 
   try {
-    const params = [title, start_time, end_time, day, safeEventDate, level_required, level, capacity, description, type, cust_group, venue, guided_by, eventId];
+    const params = [title, start_time, end_time, day, safeEventDate, level_required, level, capacity, description, type, cust_group, venue, guided_by, eventId, req.admin.academy_id];
     const result = await pool.query(
       `UPDATE events SET
         title = $1,
@@ -177,7 +282,7 @@ app.put('/api/events/:id', async (req, res) => {
         cust_group = $11,
         venue = $12,
         guided_by = $13
-      WHERE id = $14
+      WHERE id = $14 AND academy_id = $15
       RETURNING *`,
       params
     );
@@ -311,14 +416,14 @@ app.get('/api/event/:eventId/waitlist', async (req, res) => {
   }
 });
 
-// Admin: Get active users count
-app.get('/api/users/active/count', async (req, res) => {
+// Admin: Get active users count for the academy
+app.get('/api/users/active/count', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT COUNT(*) as count 
       FROM users 
-      WHERE status = 'Active'
-    `);
+      WHERE status = 'Active' AND academy_id = $1
+    `, [req.admin.academy_id]);
     res.json({ count: parseInt(result.rows[0].count) });
   } catch (err) {
     console.error(err);
@@ -341,8 +446,8 @@ app.get('/api/users/:userId/active/count', async (req, res) => {
   }
 });
 
-// Admin: Get confirmed registrations count for current week
-app.get('/api/registrations/confirmed/week', async (req, res) => {
+// Admin: Get confirmed registrations count for current week for the academy
+app.get('/api/registrations/confirmed/week', authenticateAdmin, async (req, res) => {
   try {
     // Get current week (Sunday to Saturday)
     const today = new Date();
@@ -362,7 +467,8 @@ app.get('/api/registrations/confirmed/week', async (req, res) => {
       WHERE r.status = 'confirmed' 
         AND e.start_time >= $1 
         AND e.start_time <= $2
-    `, [weekStart.toISOString(), weekEnd.toISOString()]);
+        AND e.academy_id = $3
+    `, [weekStart.toISOString(), weekEnd.toISOString(), req.admin.academy_id]);
     
     res.json({ count: parseInt(result.rows[0].count) });
   } catch (err) {
@@ -561,14 +667,19 @@ app.post('/api/register-survey', async (req, res) => {
   }
 });
 
-// Get all users (for participant search)
-app.get('/api/users', async (req, res) => {
+// Admin: Get all users for the academy
+app.get('/api/users', authenticateAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, full_name, email FROM users ORDER BY full_name ASC');
+    const result = await pool.query(`
+      SELECT id, full_name, email, level, gender, status
+      FROM users 
+      WHERE academy_id = $1
+      ORDER BY full_name
+    `, [req.admin.academy_id]);
     res.json(result.rows);
   } catch (err) {
-    console.error('Failed to fetch users:', err);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    console.error(err);
+    res.status(500).send('Error retrieving users');
   }
 });
 
