@@ -126,6 +126,70 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
+// Update an event by ID
+app.put('/api/events/:id', async (req, res) => {
+  const eventId = req.params.id;
+  const {
+    title,
+    start_time,
+    end_time,
+    day,
+    event_date,
+    level_required,
+    level,
+    capacity,
+    description,
+    type,
+    cust_group,
+    venue,
+    guided_by
+  } = req.body;
+
+  // Ensure event_date is set
+  let safeEventDate = event_date;
+  if (!safeEventDate || safeEventDate === '') {
+    if (start_time && typeof start_time === 'string' && start_time.length >= 10) {
+      safeEventDate = start_time.slice(0, 10);
+    } else {
+      return res.status(400).json({ error: 'event_date is required and could not be determined from start_time.' });
+    }
+  }
+
+  if (!title || !start_time || !end_time || !capacity || !type || !venue || !safeEventDate) {
+    return res.status(400).json({ error: 'Missing required event fields' });
+  }
+
+  try {
+    const params = [title, start_time, end_time, day, safeEventDate, level_required, level, capacity, description, type, cust_group, venue, guided_by, eventId];
+    const result = await pool.query(
+      `UPDATE events SET
+        title = $1,
+        start_time = $2,
+        end_time = $3,
+        day = $4,
+        event_date = $5,
+        level_required = $6,
+        level = $7,
+        capacity = $8,
+        description = $9,
+        type = $10,
+        cust_group = $11,
+        venue = $12,
+        guided_by = $13
+      WHERE id = $14
+      RETURNING *`,
+      params
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    res.json({ event: result.rows[0], message: 'Event updated successfully' });
+  } catch (err) {
+    console.error('DEBUG: Failed to update event:', err.stack || err);
+    res.status(500).json({ error: 'Failed to update event' });
+  }
+});
+
 // sorting of events
 // ✅ /api/events/:userId with level, gender (cust_group), waitlist count, and description
 
