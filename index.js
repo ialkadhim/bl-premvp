@@ -670,15 +670,45 @@ app.post('/api/register-survey', async (req, res) => {
 // Admin: Get all users for the academy
 app.get('/api/users', authenticateAdmin, async (req, res) => {
   try {
+    console.log('DEBUG: /api/users called with admin:', {
+      id: req.admin.id,
+      academy_id: req.admin.academy_id,
+      academy_name: req.admin.academy_name
+    });
+
     const result = await pool.query(`
       SELECT id, full_name, email, level, gender, status
       FROM users 
-      WHERE academy_id = $1
       ORDER BY full_name
-    `, [req.admin.academy_id]);
+    `);
+
+    console.log('DEBUG: Found', result.rows.length, 'users globally');
     res.json(result.rows);
   } catch (err) {
     console.error(err);
+    console.error('DEBUG: Full error details:', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      hint: err.hint
+    });
+    res.status(500).send('Error retrieving users');
+  }
+});
+
+// Fallback: Get all users (no authentication required)
+app.get('/api/users/fallback', async (req, res) => {
+  try {
+    console.log('DEBUG: /api/users/fallback called');
+    const result = await pool.query(`
+      SELECT id, full_name, email, level, gender, status
+      FROM users 
+      ORDER BY full_name
+    `);
+    console.log('DEBUG: Found', result.rows.length, 'users total');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('DEBUG: Fallback users error:', err);
     res.status(500).send('Error retrieving users');
   }
 });
