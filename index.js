@@ -88,7 +88,10 @@ app.post('/api/events', async (req, res) => {
     description,
     type,
     cust_group,
-    venue
+    venue,
+    day,
+    cust_segment,
+    guided_by
   } = req.body;
 
   if (!title || !start_time || !end_time || !capacity || !type || !venue) {
@@ -100,7 +103,7 @@ app.post('/api/events', async (req, res) => {
       `INSERT INTO events (title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue]
+      [title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue, day, cust_segment, guided_by]
     );
     res.status(201).json({ event: result.rows[0], message: 'Event created successfully' });
   } catch (err) {
