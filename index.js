@@ -292,6 +292,25 @@ app.get('/api/event/:eventId/participants', async (req, res) => {
   }
 });
 
+// ✅ /api/event/:eventId/waitlist returns waitlist participant full names
+app.get('/api/event/:eventId/waitlist', async (req, res) => {
+  const eventId = req.params.eventId;
+
+  try {
+    const result = await pool.query(`
+      SELECT u.full_name FROM registrations r
+      JOIN users u ON u.id = r.user_id
+      WHERE r.event_id = $1 AND r.status = 'waitlist'
+    `, [eventId]);
+
+    const names = result.rows.map(row => row.full_name);
+    res.json({ waitlist: names });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Failed to load waitlist');
+  }
+});
+
 // Admin: Get active users count
 app.get('/api/users/active/count', async (req, res) => {
   try {
