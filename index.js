@@ -94,20 +94,34 @@ app.post('/api/events', async (req, res) => {
     guided_by
   } = req.body;
 
-  if (!title || !start_time || !end_time || !capacity || !type || !venue) {
+  console.log('DEBUG: Received event body:', req.body);
+
+  // Ensure event_date is set
+  let safeEventDate = event_date;
+  if (!safeEventDate || safeEventDate === '') {
+    if (start_time && typeof start_time === 'string' && start_time.length >= 10) {
+      safeEventDate = start_time.slice(0, 10);
+    } else {
+      return res.status(400).json({ error: 'event_date is required and could not be determined from start_time.' });
+    }
+  }
+
+  if (!title || !start_time || !end_time || !capacity || !type || !venue || !safeEventDate) {
     return res.status(400).json({ error: 'Missing required event fields' });
   }
 
   try {
+    const params = [title, start_time, end_time, day, safeEventDate, level_required, level, capacity, description, type, cust_group, venue, guided_by];
+    console.log('DEBUG: Insert params:', params);
     const result = await pool.query(
       `INSERT INTO events (title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by]
+      params
     );
     res.status(201).json({ event: result.rows[0], message: 'Event created successfully' });
   } catch (err) {
-    console.error(err);
+    console.error('DEBUG: Failed to create event:', err.stack || err);
     res.status(500).json({ error: 'Failed to create event' });
   }
 });
