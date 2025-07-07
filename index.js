@@ -64,6 +64,7 @@ app.get('/api/events', async (req, res) => {
         e.type,
         e.cust_group,
         e.venue,
+        e.guided_by,
         (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'confirmed') AS spots_filled,
         (SELECT COUNT(*) FROM registrations r2 WHERE r2.event_id = e.id AND r2.status = 'waitlist') AS waitlist_count
       FROM events e
@@ -238,6 +239,7 @@ app.get('/api/events/:userId', async (req, res) => {
           e.type,
           e.cust_group,
           e.venue,
+          e.guided_by,
           COUNT(DISTINCT r.user_id) FILTER (WHERE r.status = 'confirmed') AS spots_filled,
           COUNT(DISTINCT r2.user_id) FILTER (WHERE r2.status = 'waitlist') AS waitlist_count,
           MAX(ur.status) AS user_status,
