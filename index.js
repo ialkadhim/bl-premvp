@@ -422,8 +422,8 @@ app.get('/api/users/active/count', authenticateAdmin, async (req, res) => {
     const result = await pool.query(`
       SELECT COUNT(*) as count 
       FROM users 
-      WHERE status = 'Active' AND academy_id = $1
-    `, [req.admin.academy_id]);
+      WHERE status = 'Active'
+    `);
     res.json({ count: parseInt(result.rows[0].count) });
   } catch (err) {
     console.error(err);
