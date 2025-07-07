@@ -90,7 +90,6 @@ app.post('/api/events', async (req, res) => {
     cust_group,
     venue,
     day,
-    cust_group,
     guided_by
   } = req.body;
 
