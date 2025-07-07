@@ -90,7 +90,7 @@ app.post('/api/events', async (req, res) => {
     cust_group,
     venue,
     day,
-    cust_segment,
+    cust_group,
     guided_by
   } = req.body;
 
@@ -100,7 +100,7 @@ app.post('/api/events', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO events (title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue)
+      `INSERT INTO events (title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue, guided_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue, day, cust_segment, guided_by]
