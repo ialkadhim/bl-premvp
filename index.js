@@ -76,6 +76,39 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
+// Create a new event (New Booking)
+app.post('/api/events', async (req, res) => {
+  const {
+    title,
+    start_time,
+    end_time,
+    level_required,
+    level,
+    capacity,
+    description,
+    type,
+    cust_group,
+    venue
+  } = req.body;
+
+  if (!title || !start_time || !end_time || !capacity || !type || !venue) {
+    return res.status(400).json({ error: 'Missing required event fields' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO events (title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [title, start_time, end_time, level_required, level, capacity, description, type, cust_group, venue]
+    );
+    res.status(201).json({ event: result.rows[0], message: 'Event created successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create event' });
+  }
+});
+
 // sorting of events
 // ✅ /api/events/:userId with level, gender (cust_group), waitlist count, and description
 
