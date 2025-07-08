@@ -299,10 +299,129 @@ app.put('/api/events/:id', authenticateAdmin, async (req, res) => {
 // sorting of events
 // ✅ /api/events/:userId with level, gender (cust_group), waitlist count, and description
 
-app.get('/api/events/:userId', async (req, res) => {
+// --- USER AUTHENTICATION (user_login table) ---
+
+// Middleware to check user authentication
+const authenticateUser = async (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  try {
+    const result = await pool.query(
+      `SELECT ul.*, u.* FROM user_login ul JOIN users u ON ul.user_id = u.id WHERE ul.session_token = $1`,
+      [token]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+    req.user = result.rows[0];
+    next();
+  } catch (err) {
+    console.error('User auth error:', err);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+};
+
+// User login endpoint (user_login table)
+app.post('/api/user/login', async (req, res) => {
+  const { user_name, passkey } = req.body;
+  if (!user_name || !passkey) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+  try {
+    const result = await pool.query(
+      `SELECT * FROM user_login WHERE user_name = $1 AND passkey = $2`,
+      [user_name, passkey]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    const login = result.rows[0];
+    // Generate session token
+    const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    // Store session token and update last_login
+    await pool.query(
+      'UPDATE user_login SET session_token = $1, last_login = NOW() WHERE id = $2',
+      [sessionToken, login.id]
+    );
+    // Fetch user profile
+    const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [login.user_id]);
+    const user = userRes.rows[0];
+    res.json({
+      token: sessionToken,
+      user: {
+        id: user.id,
+        full_name: user.full_name,
+        last_name: user.last_name,
+        membership_number: user.membership_number,
+        gender: user.gender,
+        tennis_competency_level: user.tennis_competency_level,
+        status: user.status
+      }
+    });
+  } catch (err) {
+    console.error('User login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// User logout endpoint
+app.post('/api/user/logout', authenticateUser, async (req, res) => {
+  try {
+    await pool.query('UPDATE user_login SET session_token = NULL WHERE id = $1', [req.user.id]);
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('User logout error:', err);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Get current user session
+app.get('/api/user/session', authenticateUser, async (req, res) => {
+  res.json({
+    user: {
+      id: req.user.user_id,
+      full_name: req.user.full_name,
+      last_name: req.user.last_name,
+      membership_number: req.user.membership_number,
+      gender: req.user.gender,
+      tennis_competency_level: req.user.tennis_competency_level,
+      status: req.user.status
+    }
+  });
+});
+
+// --- ACADEMY MEMBERSHIPS ENDPOINT ---
+// Returns all active memberships (not expired) for a user
+app.get('/api/user/:userId/memberships', authenticateUser, async (req, res) => {
+  const userId = req.params.userId;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM academy_memberships WHERE player_id = $1 AND (expiry_date IS NULL OR expiry_date > NOW())`,
+      [userId]
+    );
+    res.json({ memberships: result.rows });
+  } catch (err) {
+    console.error('Memberships fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch memberships' });
+  }
+});
+
+app.get('/api/events/:userId', authenticateUser, async (req, res) => {
   const userId = req.params.userId;
 
   try {
+    // Get user's active academy memberships
+    const membershipsRes = await pool.query(
+      `SELECT academy_id FROM academy_memberships WHERE player_id = $1 AND (expiry_date IS NULL OR expiry_date > NOW())`,
+      [userId]
+    );
+    const academyIds = membershipsRes.rows.map(r => r.academy_id);
+    if (!academyIds.length) {
+      return res.json([]); // No memberships, no events
+    }
+
     const userRes = await pool.query('SELECT level, gender FROM users WHERE id = $1', [userId]);
 
     if (!userRes.rows.length) {
@@ -354,13 +473,16 @@ app.get('/api/events/:userId', async (req, res) => {
         LEFT JOIN registrations r2 ON r2.event_id = e.id
         LEFT JOIN registrations ur ON ur.event_id = e.id AND ur.user_id = $1
         WHERE (
-          e.level_required = 'All Levels' 
-          OR (e.level >= $2 AND e.level <= $3)
+          e.academy_id = ANY($2::int[])
+          AND (
+            e.level_required = 'All Levels' 
+            OR (e.level >= $3 AND e.level <= $4)
+          )
+          AND (e.cust_group = 'Mix Adult' OR e.cust_group = $5)
         )
-          AND (e.cust_group = 'Mix Adult' OR e.cust_group = $4)
         GROUP BY e.id, ur.completion
         ORDER BY e.start_time ASC
-      `, [userId, minLevel, maxLevel, userGender]);
+      `, [userId, academyIds, minLevel, maxLevel, userGender]);
 
       console.log('DEBUG - Events found:', result.rows.length);
       console.log('DEBUG - Event levels:', result.rows.map(e => ({ id: e.id, title: e.title, level: e.level, level_required: e.level_required })));
