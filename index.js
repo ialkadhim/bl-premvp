@@ -455,22 +455,13 @@ app.post('/api/user/events', authenticateUser, async (req, res) => {
     });
 
     // --- Level logic ---
-    let level_required = 'All Levels';
-    let level = null;
-    if (level_required === 'my-level') {
-      // Use user.tennis_competency_level to assign label and float value
-      let lvl = parseFloat(req.user.tennis_competency_level);
-      if (!isNaN(lvl)) {
-        level = lvl; // Set event.level to the user's float value
-        if (lvl <= 0.5) level_required = 'Entry';
-        else if (lvl <= 1.5) level_required = 'Beginner';
-        else if (lvl <= 2.5) level_required = 'Intermediate';
-        else if (lvl <= 3.5) level_required = 'Advanced';
-        else level_required = 'Professional';
-      } else {
-        console.warn('User level is not a valid float:', req.user.tennis_competency_level);
-      }
-    }
+    // REMOVE the following block:
+    // let level_required = 'All Levels';
+    // let level = null;
+    // if (level_required === 'my-level') {
+    //   ...
+    // }
+    // Instead, use the destructured values from req.body as-is.
 
     const params = [
       title,
