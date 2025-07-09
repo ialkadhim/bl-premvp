@@ -357,6 +357,7 @@ app.post('/api/user/login', async (req, res) => {
         membership_number: user.membership_number,
         gender: user.gender,
         tennis_competency_level: user.tennis_competency_level,
+        level: user.level, // <-- Add this line to include the float level
         status: user.status
       }
     });
