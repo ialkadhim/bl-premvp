@@ -835,6 +835,23 @@ app.get('/api/users/fallback', async (req, res) => {
   }
 });
 
+// Get all academies (for frontend dropdown population)
+app.get('/api/academies', async (req, res) => {
+  try {
+    console.log('DEBUG: /api/academies called');
+    const result = await pool.query(`
+      SELECT id, name, details
+      FROM academies 
+      ORDER BY name
+    `);
+    console.log('DEBUG: Found', result.rows.length, 'academies');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('DEBUG: Academies error:', err);
+    res.status(500).send('Error retrieving academies');
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 console.log('🧪 DEBUG ENVIRONMENT PORT:', PORT);
 app.listen(PORT, () => console.log(`✅ Server is running on port ${PORT}`));
