@@ -404,6 +404,7 @@ app.post('/api/user/events', authenticateUser, async (req, res) => {
     venue,
     capacity,
     level_required,
+    level,
     cust_group,
     description
   } = req.body;
