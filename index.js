@@ -338,6 +338,10 @@ app.post('/api/user/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const login = result.rows[0];
+    // Check if user_id is null (account not activated)
+    if (login.user_id === null) {
+      return res.status(403).json({ error: 'Your account is not yet activated. Please check back later.' });
+    }
     // Generate session token
     const sessionToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
     // Store session token and update last_login
@@ -607,9 +611,9 @@ app.get('/api/events/:userId', authenticateUser, async (req, res) => {
         WHERE (
           e.academy_id = ANY($2::int[])
           AND (
-            e.level_required = 'All Levels' 
+          e.level_required = 'All Levels' 
             OR (e.level >= $3 AND e.level <= $4)
-          )
+        )
           AND (e.cust_group = 'Mix Adult' OR e.cust_group = $5)
         )
         GROUP BY e.id, ur.completion
@@ -981,6 +985,53 @@ app.get('/api/academies', async (req, res) => {
   } catch (err) {
     console.error('DEBUG: Academies error:', err);
     res.status(500).send('Error retrieving academies');
+  }
+});
+
+// --- USER SIGNUP ENDPOINT ---
+app.post('/api/user/signup', async (req, res) => {
+  const { username, password, lastname, firstname, gender, phone, email } = req.body;
+  if (!username || !password || !lastname || !firstname || !gender || !phone || !email) {
+    return res.status(400).json({ error: 'All fields are required.' });
+  }
+
+  try {
+    // Check for existing user_name, phone, email
+    const [userNameRes, phoneRes, emailRes] = await Promise.all([
+      pool.query('SELECT 1 FROM user_login WHERE user_name = $1', [username]),
+      pool.query('SELECT 1 FROM users WHERE phone = $1', [phone]),
+      pool.query('SELECT 1 FROM users WHERE email = $1', [email])
+    ]);
+    const errors = {};
+    if (userNameRes.rows.length > 0) errors.username = 'This username is already taken.';
+    if (phoneRes.rows.length > 0) errors.phone = 'This phone number is already used.';
+    if (emailRes.rows.length > 0) errors.email = 'This email address is already used.';
+    if (Object.keys(errors).length > 0) {
+      return res.status(409).json({ errors });
+    }
+
+    // Create user_login record (user_name, passkey)
+    const userLoginResult = await pool.query(
+      'INSERT INTO user_login (user_name, passkey) VALUES ($1, $2) RETURNING id',
+      [username, password]
+    );
+    const userLoginId = userLoginResult.rows[0].id;
+
+    // Create users record
+    const fullName = firstname + ' ' + lastname;
+    const usersResult = await pool.query(
+      'INSERT INTO users (last_name, full_name, gender, phone, email, membership_number) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [lastname, fullName, gender, phone, email, username]
+    );
+    const userId = usersResult.rows[0].id;
+
+    // Optionally, link user_login.user_id to users.id (if schema allows)
+    await pool.query('UPDATE user_login SET user_id = $1 WHERE id = $2', [userId, userLoginId]);
+
+    res.status(201).json({ message: 'Signup successful. Account pending activation.' });
+  } catch (err) {
+    console.error('Signup error:', err);
+    res.status(500).json({ error: 'Signup failed. Please try again.' });
   }
 });
 
