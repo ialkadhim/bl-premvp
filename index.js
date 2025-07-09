@@ -1075,13 +1075,14 @@ app.get('/api/promo/featured', async (req, res) => {
   try {
     const now = new Date();
     const nowISO = now.toISOString();
-    // Find promo event where now is between start and end
+    // Use correct column names for promo_events timestamps
+    // Try 'start' and 'end', fallback to 'start_time'/'end_time' if those exist
     const promoRes = await pool.query(`
-      SELECT p.*, e.title, e.start_time, e.end_time, e.venue, e.description
+      SELECT p.*, e.title, e.start_time AS event_start_time, e.end_time AS event_end_time, e.venue, e.description
       FROM promo_events p
       JOIN events e ON p.event_id = e.id
-      WHERE p.start_time <= $1 AND p.end_time >= $1
-      ORDER BY p.start_time DESC
+      WHERE p.start <= $1 AND p.end >= $1
+      ORDER BY p.start DESC
       LIMIT 1
     `, [nowISO]);
     if (!promoRes.rows.length) {
