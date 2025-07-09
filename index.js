@@ -1035,6 +1035,90 @@ app.post('/api/user/signup', async (req, res) => {
   }
 });
 
+// --- LEADERBOARD: Top 3 users by completed events + current user ---
+app.get('/api/leaderboard/completed', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    // Get top 3 users by completed events
+    const topUsers = await pool.query(`
+      SELECT u.id, u.full_name, COUNT(r.id) AS completed_count
+      FROM users u
+      JOIN registrations r ON u.id = r.user_id
+      WHERE r.completion = 'Completed'
+      GROUP BY u.id, u.full_name
+      ORDER BY completed_count DESC, u.full_name ASC
+      LIMIT 3
+    `);
+    let leaderboard = topUsers.rows;
+    // If user_id is provided and not in top 3, fetch and add current user
+    if (user_id && !leaderboard.some(u => u.id == user_id)) {
+      const userRow = await pool.query(`
+        SELECT u.id, u.full_name, COUNT(r.id) AS completed_count
+        FROM users u
+        LEFT JOIN registrations r ON u.id = r.user_id AND r.completion = 'Completed'
+        WHERE u.id = $1
+        GROUP BY u.id, u.full_name
+      `, [user_id]);
+      if (userRow.rows.length) {
+        leaderboard.push(userRow.rows[0]);
+      }
+    }
+    res.json({ leaderboard });
+  } catch (err) {
+    console.error('Leaderboard error:', err);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// --- FEATURED EVENT: promo_events (active only) ---
+app.get('/api/promo/featured', async (req, res) => {
+  try {
+    const now = new Date();
+    const nowISO = now.toISOString();
+    // Find promo event where now is between start and end
+    const promoRes = await pool.query(`
+      SELECT p.*, e.title, e.start_time, e.end_time, e.venue, e.description
+      FROM promo_events p
+      JOIN events e ON p.event_id = e.id
+      WHERE p.start_time <= $1 AND p.end_time >= $1
+      ORDER BY p.start_time DESC
+      LIMIT 1
+    `, [nowISO]);
+    if (!promoRes.rows.length) {
+      return res.json({ featured: null });
+    }
+    res.json({ featured: promoRes.rows[0] });
+  } catch (err) {
+    console.error('Featured event error:', err);
+    res.status(500).json({ error: 'Failed to fetch featured event' });
+  }
+});
+
+// --- NEXT UPCOMING CONFIRMED EVENT FOR USER ---
+app.get('/api/user/:id/next-event', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const now = new Date();
+    const nowISO = now.toISOString();
+    // Find next event where user is registered (completion is null), ordered by soonest start_time
+    const nextRes = await pool.query(`
+      SELECT e.*
+      FROM registrations r
+      JOIN events e ON r.event_id = e.id
+      WHERE r.user_id = $1 AND r.completion IS NULL AND e.start_time > $2
+      ORDER BY e.start_time ASC
+      LIMIT 1
+    `, [userId, nowISO]);
+    if (!nextRes.rows.length) {
+      return res.json({ next: null });
+    }
+    res.json({ next: nextRes.rows[0] });
+  } catch (err) {
+    console.error('Next event error:', err);
+    res.status(500).json({ error: 'Failed to fetch next event' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 console.log('🧪 DEBUG ENVIRONMENT PORT:', PORT);
 app.listen(PORT, () => console.log(`✅ Server is running on port ${PORT}`));
