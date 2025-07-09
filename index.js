@@ -392,6 +392,127 @@ app.get('/api/user/session', authenticateUser, async (req, res) => {
   });
 });
 
+// User: Create a new event (Publish Event)
+app.post('/api/user/events', authenticateUser, async (req, res) => {
+  const {
+    academy_id,
+    title,
+    type,
+    start_time,
+    end_time,
+    venue,
+    capacity,
+    level_required,
+    cust_group,
+    description
+  } = req.body;
+
+  console.log('DEBUG: User event creation - Received body:', req.body);
+
+  // Validate required fields
+  if (!academy_id || !title || !type || !start_time || !end_time || !venue || !capacity) {
+    return res.status(400).json({ error: 'Missing required event fields' });
+  }
+
+  try {
+    // Verify user has membership at this academy
+    const membershipCheck = await pool.query(
+      `SELECT * FROM academy_memberships 
+       WHERE player_id = $1 AND academy_id = $2 AND (expiry_date IS NULL OR expiry_date > NOW())`,
+      [req.user.user_id, academy_id]
+    );
+
+    if (membershipCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not have an active membership at this academy' });
+    }
+
+    // Parse the date and time
+    const startDate = new Date(start_time);
+    const endDate = new Date(end_time);
+    
+    // Extract date components
+    const eventDate = startDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Get day name from the date
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const day = dayNames[startDate.getDay()];
+    
+    // Format timestamps for database (YYYY-MM-DD HH:MM:SS)
+    const formattedStartTime = startDate.toISOString().slice(0, 19).replace('T', ' ');
+    const formattedEndTime = endDate.toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Use user's full name as guided_by (default)
+    const guidedBy = req.user.full_name || 'User Created';
+
+    console.log('DEBUG: User event creation - Processed data:', {
+      eventDate,
+      day,
+      formattedStartTime,
+      formattedEndTime,
+      guidedBy
+    });
+
+    const params = [
+      title,
+      formattedStartTime,
+      formattedEndTime,
+      day,
+      eventDate,
+      level_required,
+      null, // level (not used for user-created events)
+      capacity,
+      description || null,
+      type,
+      cust_group,
+      venue,
+      guidedBy,
+      academy_id
+    ];
+
+    console.log('DEBUG: User event creation - Insert params:', params);
+
+    const result = await pool.query(
+      `INSERT INTO events (title, start_time, end_time, day, event_date, level_required, level, capacity, description, type, cust_group, venue, guided_by, academy_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       RETURNING *`,
+      params
+    );
+
+    const createdEvent = result.rows[0];
+    
+    // Format the response to match frontend expectations
+    const responseEvent = {
+      id: createdEvent.id,
+      title: createdEvent.title,
+      start_time: createdEvent.start_time,
+      end_time: createdEvent.end_time,
+      day: createdEvent.day,
+      event_date: createdEvent.event_date,
+      level_required: createdEvent.level_required,
+      capacity: createdEvent.capacity,
+      description: createdEvent.description,
+      type: createdEvent.type,
+      cust_group: createdEvent.cust_group,
+      venue: createdEvent.venue,
+      guided_by: createdEvent.guided_by,
+      academy_id: createdEvent.academy_id,
+      spots_filled: 0, // New event, no participants yet
+      waitlist_count: 0,
+      user_status: null
+    };
+
+    res.status(201).json({ 
+      event: responseEvent, 
+      message: 'Event published successfully',
+      event_id: createdEvent.id
+    });
+
+  } catch (err) {
+    console.error('DEBUG: User event creation failed:', err.stack || err);
+    res.status(500).json({ error: 'Failed to publish event' });
+  }
+});
+
 // --- ACADEMY MEMBERSHIPS ENDPOINT ---
 // Returns all active memberships (not expired) for a user
 app.get('/api/user/:userId/memberships', authenticateUser, async (req, res) => {
