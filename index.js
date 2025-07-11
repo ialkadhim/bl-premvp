@@ -1039,12 +1039,11 @@ app.post('/api/user/signup', async (req, res) => {
 app.get('/api/leaderboard/completed', async (req, res) => {
   try {
     const { user_id } = req.query;
-    // Get top 3 users by completed events
+    // Get top 3 users by completed events (status = 'confirmed' AND completion = 'Completed')
     const topUsers = await pool.query(`
-      SELECT u.id, u.full_name, COUNT(r.id) AS completed_count
+      SELECT u.id, u.full_name, COUNT(r.id) FILTER (WHERE r.status = 'confirmed' AND r.completion = 'Completed') AS completed_count
       FROM users u
-      JOIN registrations r ON u.id = r.user_id
-      WHERE r.completion = 'Completed'
+      LEFT JOIN registrations r ON u.id = r.user_id
       GROUP BY u.id, u.full_name
       ORDER BY completed_count DESC, u.full_name ASC
       LIMIT 3
@@ -1053,9 +1052,9 @@ app.get('/api/leaderboard/completed', async (req, res) => {
     // If user_id is provided and not in top 3, fetch and add current user
     if (user_id && !leaderboard.some(u => u.id == user_id)) {
       const userRow = await pool.query(`
-        SELECT u.id, u.full_name, COUNT(r.id) AS completed_count
+        SELECT u.id, u.full_name, COUNT(r.id) FILTER (WHERE r.status = 'confirmed' AND r.completion = 'Completed') AS completed_count
         FROM users u
-        LEFT JOIN registrations r ON u.id = r.user_id AND r.completion = 'Completed'
+        LEFT JOIN registrations r ON u.id = r.user_id
         WHERE u.id = $1
         GROUP BY u.id, u.full_name
       `, [user_id]);
@@ -1091,6 +1090,24 @@ app.get('/api/promo/featured', async (req, res) => {
   } catch (err) {
     console.error('Featured event error:', err);
     res.status(500).json({ error: 'Failed to fetch featured event' });
+  }
+});
+
+// --- COMPLETED LESSONS COUNT FOR USER ---
+app.get('/api/user/:id/completed-lessons', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    // Count registrations where completion = 'Completed'
+    const countRes = await pool.query(`
+      SELECT COUNT(*) as count
+      FROM registrations
+      WHERE user_id = $1 AND completion = 'Completed'
+    `, [userId]);
+    
+    res.json({ count: parseInt(countRes.rows[0].count) });
+  } catch (err) {
+    console.error('Completed lessons count error:', err);
+    res.status(500).json({ error: 'Failed to fetch completed lessons count' });
   }
 });
 
