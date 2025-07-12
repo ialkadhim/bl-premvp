@@ -309,7 +309,7 @@ const authenticateUser = async (req, res, next) => {
   }
   try {
     const result = await pool.query(
-      `SELECT ul.*, u.* FROM user_login ul JOIN users u ON ul.user_id = u.id WHERE ul.session_token = $1`,
+      `SELECT ul.id as user_login_id, ul.user_name, ul.passkey, ul.session_token, ul.last_login, ul.user_id, u.* FROM user_login ul JOIN users u ON ul.user_id = u.id WHERE ul.session_token = $1`,
       [token]
     );
     if (result.rows.length === 0) {
@@ -374,7 +374,7 @@ app.post('/api/user/login', async (req, res) => {
 // User logout endpoint
 app.post('/api/user/logout', authenticateUser, async (req, res) => {
   try {
-    await pool.query('UPDATE user_login SET session_token = NULL WHERE id = $1', [req.user.id]);
+    await pool.query('UPDATE user_login SET session_token = NULL WHERE id = $1', [req.user.user_login_id]);
     res.json({ message: 'Logged out successfully' });
   } catch (err) {
     console.error('User logout error:', err);
@@ -1048,10 +1048,13 @@ app.post('/api/user/change-password', authenticateUser, async (req, res) => {
   }
   
   try {
+    // Use the user_login_id from the authenticated user
+    const userLoginId = req.user.user_login_id;
+    
     // Verify current password
     const currentPasswordCheck = await pool.query(
       'SELECT passkey FROM user_login WHERE id = $1',
-      [req.user.id]
+      [userLoginId]
     );
     
     if (currentPasswordCheck.rows.length === 0) {
@@ -1065,7 +1068,7 @@ app.post('/api/user/change-password', authenticateUser, async (req, res) => {
     // Update password
     await pool.query(
       'UPDATE user_login SET passkey = $1 WHERE id = $2',
-      [newPassword, req.user.id]
+      [newPassword, userLoginId]
     );
     
     res.json({ message: 'Password changed successfully.' });
