@@ -1035,6 +1035,46 @@ app.post('/api/user/signup', async (req, res) => {
   }
 });
 
+// --- USER PASSWORD CHANGE ENDPOINT ---
+app.post('/api/user/change-password', authenticateUser, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required.' });
+  }
+  
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+  }
+  
+  try {
+    // Verify current password
+    const currentPasswordCheck = await pool.query(
+      'SELECT passkey FROM user_login WHERE id = $1',
+      [req.user.id]
+    );
+    
+    if (currentPasswordCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    
+    if (currentPasswordCheck.rows[0].passkey !== currentPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+    
+    // Update password
+    await pool.query(
+      'UPDATE user_login SET passkey = $1 WHERE id = $2',
+      [newPassword, req.user.id]
+    );
+    
+    res.json({ message: 'Password changed successfully.' });
+  } catch (err) {
+    console.error('Password change error:', err);
+    res.status(500).json({ error: 'Failed to change password. Please try again.' });
+  }
+});
+
 // --- LEADERBOARD: Top 3 users by completed events + current user ---
 app.get('/api/leaderboard/completed', async (req, res) => {
   try {
